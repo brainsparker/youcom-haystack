@@ -1,0 +1,47 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Lint
+        if: matrix.python-version == '3.13' && runner.os == 'Linux'
+        run: hatch run fmt-check && hatch run test:types
+
+      - name: Run unit tests
+        run: hatch run test:unit
+
+      - name: Run integration tests (keyless)
+        if: runner.os == 'Linux'
+        run: hatch run test:integration
+        env:
+          YDC_API_KEY: ${{ secrets.YDC_API_KEY }}
