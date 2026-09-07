@@ -2,6 +2,6 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-from .youcom_websearch import YouComWebSearch
+from .youcom_websearch import YouComWebSearch, documents_to_text
 
-__all__ = ["YouComWebSearch"]
+__all__ = ["YouComWebSearch", "documents_to_text"]

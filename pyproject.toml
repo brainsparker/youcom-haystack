@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youcom-haystack"
-version = "0.1.0"
+version = "0.2.0"
 description = "Haystack integration for the You.com Search API — works with zero configuration via the keyless free tier"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -117,6 +117,7 @@ ignore = [
     "PLR0912",
     "PLR0913",
     "PLR0915",
+    "PLR0917",
     "ANN401",
 ]
 
