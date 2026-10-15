@@ -23,7 +23,7 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = ["haystack-ai>=2.24.1", "httpx>=0.27.0", "requests>=2.31.0"]
+dependencies = ["haystack-ai>=2.24.1", "httpx>=0.27.0", "tenacity!=8.4.0"]
 
 [project.urls]
 Documentation = "https://github.com/youdotcom-oss/youcom-haystack#readme"
@@ -65,7 +65,7 @@ check_untyped_defs = true
 disallow_incomplete_defs = true
 
 [[tool.mypy.overrides]]
-module = ["httpx.*", "requests.*"]
+module = ["httpx.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -116,6 +116,7 @@ ignore = [
     "PLR0911",
     "PLR0912",
     "PLR0913",
+    "PLR0917",
     "PLR0915",
     "ANN401",
 ]

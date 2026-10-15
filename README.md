@@ -63,6 +63,63 @@ print(result["llm"]["replies"][0].text)
 result = await websearch.run_async(query="What is Haystack by deepset?")
 ```
 
+### Narrow a single call
+
+`run()` and `run_async()` accept per-call overrides, so one component can serve an agent that searches with different intent on every step:
+
+```python
+websearch = YouComWebSearch(top_k=10, country="US")
+
+websearch.run(query="Haystack 3 release notes", freshness="week")
+websearch.run(query="Haystack Agent hooks", top_k=3, search_params={"country": "DE", "exclude_domains": ["reddit.com"]})
+```
+
+`top_k` and `freshness` have dedicated arguments. `search_params` takes any other You.com Search API parameter and is merged over the init-time settings for that call only; set a key to `None` to drop an init-time value for the call.
+
+### Domain filters
+
+```python
+# Only these sources (strict allowlist, up to 500 domains)
+YouComWebSearch(include_domains=["nytimes.com", "bbc.com"])
+
+# Everything except these (up to 5000), with a ranking boost for preferred sources (up to 500)
+YouComWebSearch(exclude_domains=["pinterest.com"], boost_domains=["docs.python.org"])
+```
+
+`include_domains` cannot be combined with `exclude_domains` or `boost_domains` (the API rejects that with a 422); the component raises a `ValueError` before sending the request.
+
+### Lifecycle
+
+The component keeps one pooled HTTP client per component for the sync path and one for the async path, following the Haystack 3 `warm_up` / `close` convention. `Pipeline` and `Agent` call these for you; call them yourself when you use the component standalone in a long-running service:
+
+```python
+websearch = YouComWebSearch()
+websearch.warm_up()  # optional, avoids cold-start latency on the first search
+...
+websearch.close()  # releases the connection pool
+
+await websearch.warm_up_async()
+...
+await websearch.close_async()
+```
+
+A closed component reopens its client on the next `run()`.
+
+### Errors
+
+Failed searches raise `YouComSearchError`, a subclass of `httpx.HTTPStatusError` with the status, URL, and response body in the message. When the keyless free tier is exhausted, the subclass `YouComFreeTierLimitError` is raised with instructions for upgrading:
+
+```python
+from haystack_integrations.components.websearch.youcom import YouComFreeTierLimitError
+
+try:
+    websearch.run(query="...")
+except YouComFreeTierLimitError:
+    ...  # set YDC_API_KEY
+```
+
+Connection errors, timeouts, and HTTP 408, 425, 429 (keyed API only), 500, 502, 503, and 504 are retried up to `max_retries` attempts with exponential backoff, honoring `Retry-After` when the server sends it. Other 4xx responses are reported immediately.
+
 ## Parameters
 
 | Init parameter | Type | Default | Description |
@@ -73,15 +130,18 @@ result = await websearch.run_async(query="What is Haystack by deepset?")
 | `country` | `str \| None` | `None` | 2-letter country code (e.g. `US`, `DE`). |
 | `search_lang` | `str \| None` | `None` | Result language, BCP 47 (e.g. `EN`, `PT-BR`). |
 | `safesearch` | `str \| None` | `None` | `off`, `moderate`, or `strict`. |
-| `extra_params` | `dict \| None` | `None` | Extra query params passed through (e.g. `{"include_domains": "nytimes.com,bbc.com"}`). |
+| `include_domains` | `list[str] \| None` | `None` | Strict allowlist of domains (up to 500). Not combinable with the other two domain lists. |
+| `exclude_domains` | `list[str] \| None` | `None` | Domains filtered out of the results (up to 5000). |
+| `boost_domains` | `list[str] \| None` | `None` | Domains given a fixed ranking boost, not a filter (up to 500). |
+| `extra_params` | `dict \| None` | `None` | Extra query params passed through (e.g. `{"offset": 1}`). |
 | `timeout` | `int` | `10` | HTTP timeout in seconds. |
-| `max_retries` | `int` | `3` | Retry attempts on transient failures. |
+| `max_retries` | `int` | `3` | Attempts per search, including the first, on transient failures. |
 
-`run(query, top_k=None)` returns `{"documents": list[Document], "links": list[str]}`. Web results come first, then news; each `Document` carries `title`, `url`, `source` (`web`/`news`), and `page_age` in its `meta`, with snippets (or the description) as `content`.
+`run(query, top_k=None, freshness=None, search_params=None)` returns `{"documents": list[Document], "links": list[str]}`. Web results come first, then news; each `Document` carries `title`, `url`, `source` (`web`/`news`), and `page_age` in its `meta`, with snippets (or the description) as `content`.
 
 ## Rate limits
 
-Without an API key, requests use the keyless endpoint (currently 100 searches/day per IP, no livecrawl). When the limit is reached, the component raises an error explaining how to upgrade.
+Without an API key, requests use the keyless endpoint (currently 100 searches/day per IP, no livecrawl). When the limit is reached, the component raises `YouComFreeTierLimitError` explaining how to upgrade, without retrying.
 
 ## Development
 
